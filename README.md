@@ -10,3 +10,7 @@
 - ipykernel
 - jupyter
 - ipywidgets
+
+## requirements.txt 이후
+- 개인적인 GPU 사용을 위해 pytorch를 원하는 버전에 맞게 재설치 하였었음
+- ```pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118```
