@@ -10,8 +10,8 @@ class submission_20221396(nn.Module):
         self.in_channels = in_channels
         self.is_batchnorm = is_batchnorm
         self.feature_scale = feature_scale
+        self.num_classes = num_classes
 
-        #filters = [4, 8, 16, 32, 64]
         filters = [2, 4, 8, 16, 16]
 
         self.conv1 = unetConv2(self.in_channels, filters[0], self.is_batchnorm)
