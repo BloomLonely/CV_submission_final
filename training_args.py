@@ -1,11 +1,20 @@
 import torch    
 import torch.nn.functional as F
 
+MODEL_GLOBAL = None
+
 def Make_Optimizer(model):
-    return torch.optim.AdamW(model.parameters(), lr=1e-2, weight_decay=1e-4)
+    global MODEL_GLOBAL
+    MODEL_GLOBAL = model
+    num_classes = getattr(MODEL_GLOBAL, 'num_classes', 2)
+    lr = 1e-2 if num_classes == 21 else 2e-2
+    return torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
 
 def Make_LR_Scheduler(optimizer):
-    return torch.optim.lr_scheduler.StepLR(optimizer, step_size=22, gamma=0.5)
+    global MODEL_GLOBAL
+    num_classes = getattr(MODEL_GLOBAL, 'num_classes', 2)
+    step_size = 22 if num_classes == 21 else 20
+    return torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=0.5)
 
 def Make_Loss_Function(number_of_classes):
     class DiceCELoss:
@@ -56,7 +65,7 @@ def Make_Loss_Function(number_of_classes):
                 dice_loss = 1 - dice.mean()
 
                 ce_loss = DiceCELoss.ce2d_deterministic(pred, target, weight=weight2)
-                combined_loss = self.weight * dice_loss + (1 - self.weight) * ce_loss
+                combined_loss = (self.weight) * dice_loss + (1 - self.weight) * ce_loss
             else:
                 raise ValueError("mode should be 'binary' or 'multiclass'")
             
