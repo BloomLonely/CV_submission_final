@@ -1,4 +1,4 @@
-# CV_Final
+# CV_submission_inal
 
 ## 업로드 해야 하는 파일
 - submission_20221396.py (models 내에 존재.)
