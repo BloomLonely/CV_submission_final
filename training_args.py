@@ -2,10 +2,10 @@ import torch
 import torch.nn.functional as F
 
 def Make_Optimizer(model):
-    return torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    return torch.optim.AdamW(model.parameters(), lr=1e-2, weight_decay=1e-4)
 
 def Make_LR_Scheduler(optimizer):
-    return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = 10, eta_min = 1e-6)
+    return torch.optim.lr_scheduler.StepLR(optimizer, step_size=22, gamma=0.5)
 
 def Make_Loss_Function(number_of_classes):
     class DiceCELoss:
@@ -13,10 +13,25 @@ def Make_Loss_Function(number_of_classes):
             self.weight = weight
             self.epsilon = epsilon
             self.mode = mode
-        
+
+        @staticmethod
+        def ce2d_deterministic(logits, target, weight=None, ignore_index=-100, eps=1e-7):
+            log_p = torch.log_softmax(logits, dim=1)
+            log_p = log_p.gather(1, target.unsqueeze(1))
+            log_p = log_p.squeeze(1)
+
+            mask = (target != ignore_index)
+            if weight is not None:
+                w = weight[target]
+                loss = -(w * log_p * mask).sum() / (w * mask).sum()
+            else:
+                loss = -(log_p * mask).sum() / mask.sum()
+
+            return loss
+
         def __call__(self, pred, target):
             if self.mode == 'binary':
-                pred = pred.squeeze(1)  # shape: (batchsize, H, W)
+                pred = pred.squeeze(1)
                 target = target.squeeze(1).float()
                 intersection = torch.sum(pred * target, dim=(1, 2))
                 union = torch.sum(pred, dim=(1, 2)) + torch.sum(target, dim=(1, 2))
@@ -24,12 +39,13 @@ def Make_Loss_Function(number_of_classes):
                 dice_loss = 1 - dice.mean()
                 
                 ce_loss = F.binary_cross_entropy(pred, target)
+                combined_loss = self.weight * dice_loss + (1 - self.weight) * ce_loss
             
             elif self.mode == 'multiclass':
                 device = "cuda" if torch.cuda.is_available() else "cpu"
-                weight = torch.tensor([0.0083, 1.3227, 3.1356, 1.1233, 1.7000, 1.4327, 0.5643, 0.6851, 0.3903,
-                                       0.9699, 0.9778, 0.7841, 0.5153, 0.9659, 0.8963, 0.1931, 1.6641, 1.1725,
-                                       0.6847, 0.6206, 1.1934], dtype=torch.float32, device=device)
+                weight2 = torch.tensor([0.0004, 0.0671, 0.1366, 0.0526, 0.0796, 0.0603, 0.0305, 0.0310, 0.0180,
+                                        0.0551, 0.0495, 0.0458, 0.0250, 0.0411, 0.0366, 0.0090, 0.0717, 0.0578,
+                                        0.0341, 0.0323, 0.0661], dtype=torch.float32, device=device)
                 batchsize, num_classes, H, W = pred.shape
                 pred_soft = torch.softmax(pred, dim=1)
                 target = target.squeeze(1)
@@ -38,12 +54,11 @@ def Make_Loss_Function(number_of_classes):
                 union = torch.sum(pred_soft, dim=(2, 3)) + torch.sum(target_one_hot, dim=(2, 3))
                 dice = (2 * intersection + self.epsilon) / (union + self.epsilon)
                 dice_loss = 1 - dice.mean()
-                
-                ce_loss = F.cross_entropy(pred, target, weight=weight)
+
+                ce_loss = DiceCELoss.ce2d_deterministic(pred, target, weight=weight2)
+                combined_loss = self.weight * dice_loss + (1 - self.weight) * ce_loss
             else:
                 raise ValueError("mode should be 'binary' or 'multiclass'")
-            
-            combined_loss = self.weight * dice_loss + (1 - self.weight) * ce_loss
             
             return combined_loss
     
